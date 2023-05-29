@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+
+<head>
+     <meta charset="utf-8" />
+     <link rel="stylesheet" type="text/css"    href=https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/4.0.0/github-markdown.min.css>
+     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+     <div id="content" class="markdown-body">markdown_content_placeholder</div>
+
+     <script>
+     const element = document.getElementById('content')
+     markdown_text = element.innerHTML.replace(/>/g, '>')
+     element.innerHTML = marked(markdown_text)
+     </script>
+
+</body>
+
+</html>
