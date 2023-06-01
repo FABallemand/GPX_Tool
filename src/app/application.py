@@ -1,5 +1,6 @@
 # System
 import os
+from pathlib import Path
 from queue import Queue
 
 # GUI
@@ -12,6 +13,7 @@ from PyQt5.QtWidgets import *
 # Log and Thread
 from .logger import *
 from .workers import *
+
 
 class Application(QMainWindow):
     
@@ -29,6 +31,15 @@ class Application(QMainWindow):
 
         # GUI attributes
 
+        # File compression attributes
+        self.selected_path = ""
+        self.compression_method = ""
+        self.remove_GPS_errors = False
+        self.files_to_compress = []
+        self.nb_files_to_compress = 0
+        self.nb_compressed_files = 0
+        self.start_parsing_label = False
+
         # Create layout
         self.createLayout()
 
@@ -41,7 +52,7 @@ class Application(QMainWindow):
         # Show the app
         self.show()
 
-        # emitLog(Log.INFO, "Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
+        emitLog(Log.INFO, "Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
     #==== GUI ================================================================#
 
@@ -72,26 +83,25 @@ class Application(QMainWindow):
         self.sort_proxy_model.sort(0, Qt.AscendingOrder)
 
         # Push button
-        self.button = self.findChild(QPushButton, "pushButton")
-        self.button.clicked.connect(self.onButtonClicked)
-        self.button_state = 0
+        self.button_compress_files.clicked.connect(self.onButtonClicked)
+        self.button_compress_files_state = 0
 
         # Tree view
         self.treeView.setModel(self.sort_proxy_model)
-        self.treeView.setRootIndex(self.sort_proxy_model.mapFromSource(
-            self.model.index(os.path.join(QDir.currentPath(), "Results"))))
+        self.treeView.setRootIndex(self.sort_proxy_model.mapFromSource(self.model.index(str(Path.home()))))
         for column in range(1, self.model.columnCount()):
             self.treeView.hideColumn(column)
         self.treeView.clicked.connect(self.onTreeViewClicked)
 
+        # Radio buttons
+        self.radio_button_remove_25.toggled.connect(self.onCompressMethodClicked)
+        self.radio_button_remove_50.toggled.connect(self.onCompressMethodClicked)
+        self.radio_button_remove_75.toggled.connect(self.onCompressMethodClicked)
+        self.radio_button_RDP.toggled.connect(self.onCompressMethodClicked)
+        self.radio_button_RDP.setChecked(True)
+
         # Check boxes
-        self.checkboxes = [self.CDS, self.CENTRO, self.INTRON, self.MOBILE, self.NC_RNA, self.R_RNA, self.TELOMETRE, self.T_RNA, self.UTR_3, self.UTR_5, self.ALL, self.NONE]
-        self.all_checked = False
-        self.none_checked = False
-        for checkbox in self.checkboxes:
-            checkbox.toggled.connect(self.onChecked)
-        self.NONE.toggled.connect(self.onChecked_NONE)
-        self.ALL.toggled.connect(self.onChecked_ALL)
+        self.checkbox_remove_GPS_errors.toggled.connect(self.onRemoveGPSErrorsChecked)
 
         # README
         text_read = self.textEdit
@@ -101,9 +111,9 @@ class Application(QMainWindow):
             text_read.setMarkdown(markdown)
 
         # Progress bar
-        self.F_parsed_last = self.nb_parsed_files
-        self.F_TOparsed_last = self.nb_files_to_parse
-        chaine = "Parsed files: " + str(self.nb_parsed_files) + "/" + str(self.nb_files_to_parse)
+        self.F_parsed_last = self.nb_compressed_files
+        self.F_TOparsed_last = self.nb_files_to_compress
+        chaine = "Parsed files: " + str(self.nb_compressed_files) + "/" + str(self.nb_files_to_compress)
         self.progress_bar_label.setText(chaine)
 
     def setUpLogger(self):
@@ -114,14 +124,35 @@ class Application(QMainWindow):
         self.log_file = "application.log"
         if os.path.exists(self.log_file):
             os.remove(self.log_file)
-        logging.basicConfig(filename=self.log_file, encoding="utf-8", level=logging.INFO)
+        logging.basicConfig(filename=self.log_file, encoding="utf-8", level=logging.DEBUG)
 
         # Log widget
-        self.logger_box = self.findChild(QFormLayout, "formLayout_6")
         logTextBox = QPlainTextEditLogger()
-        self.logger_box.addWidget(logTextBox.widget)
+        self.log.addWidget(logTextBox.widget)
         logging.getLogger().addHandler(logTextBox)
         logTextBox.setFormatter(CustomFormatter())
+
+    def onButtonClicked(self):
+        """
+        Function executed when the "compress files" button is clicked.
+        """
+        if self.button_state == 0:
+            self.button_state = 1
+            self.button_compress_files.setText("Stop")
+            self.startCompression()
+        else:
+            self.button_state = 0
+            self.button_compress_files.setText("...")
+            self.stopCompression()
+            self.updateProgressBar()
+
+    def resetButton(self):
+        """
+        Reset button.
+        """
+        self.button_state = 0
+        self.button_compress_files.setText("Compress file(s)")
+        self.button_compress_files.setEnabled(True)  
 
     def onTreeViewClicked(self, index):
         """
@@ -134,20 +165,37 @@ class Application(QMainWindow):
         self.selected_path = self.model.filePath(mapped_index)
         emitLog(Log.INFO, "Selected path: %s" % self.selected_path)
 
+    def onCompressMethodClicked(self):
+        radio_button = self.sender()
+        if radio_button.isChecked():
+            self.compression_method = radio_button.text()
+        emitLog(Log.DEBUG, "Compression method: " + str(self.compression_method))
+
+    def onRemoveGPSErrorsChecked(self):
+        """
+        Function executed when the "remove GPS errors" checkbox is clicked.
+        """
+        if self.checkbox_remove_GPS_errors.isChecked():
+            self.remove_GPS_errors = True
+            emitLog(Log.DEBUG, "Rmove GPS errors: ON")
+        else:
+            self.remove_GPS_errors = False
+            emitLog(Log.DEBUG, "Rmove GPS errors: OFF")
+
     def updateProgressBar(self):
         """
         Update progress bar.
         """
-        advance = self.nb_parsed_files - self.F_parsed_last
-        max = self.nb_files_to_parse - self.F_TOparsed_last
+        advance = self.nb_compressed_files - self.F_parsed_last
+        max = self.nb_files_to_compress - self.F_TOparsed_last
 
         if self.button_state == 0:
             self.fileProgressBar.setValue(max)
             self.fileProgressBar.setMaximum(max)
             chaine = "Parsed files: " + str(max) + "/" + str(max)
             self.progress_bar_label.setText(chaine)
-            self.F_TOparsed_last = self.nb_files_to_parse
-            self.F_parsed_last = self.nb_parsed_files
+            self.F_TOparsed_last = self.nb_files_to_compress
+            self.F_parsed_last = self.nb_compressed_files
         else:
             self.fileProgressBar.setValue(advance)
             self.fileProgressBar.setMaximum(max)
@@ -159,8 +207,8 @@ class Application(QMainWindow):
         """
         Reset progress bar.
         """
-        self.nb_files_to_parse = 0
-        self.nb_parsed_files = 0
+        self.nb_files_to_compress = 0
+        self.nb_compressed_files = 0
         self.F_parsed_last = 0
         self.F_TOparsed_last = 0
         self.fileProgressBar.setValue(0)
@@ -199,20 +247,21 @@ class Application(QMainWindow):
             organisms (list): Tuples containing the name of the organism and the path to its folder.
             preworker (Preworker, optional): Preworker used to execute this function on a thread. Defaults to None.
         """
-        parsing_arguments = []
+        # parsing_arguments = []
 
-        for organism, organism_path in organisms:
-            emitLog(Log.INFO, "Start parsing organism: %s" % organism, preworker)
-            ids = search.searchID(organism, worker=preworker)
-            if ids == []:
-                emitLog(Log.WARNING, "Did not find any NC corresponding to organism: %s" % organism, preworker)
-                continue
-            organism_files_to_parse = tree.needParsing(organism_path, ids, worker=preworker)
-            emitLog(Log.INFO, "Organism %s has %d file(s) that need(s) to be parsed" % (organism, organism_files_to_parse), preworker)
-            if organism_files_to_parse > 0:
-                for id in ids:
-                    parsing_arguments.append((organism_path, id, organism))
-        preworker.signals.result.emit(parsing_arguments)
+        # for organism, organism_path in organisms:
+        #     emitLog(Log.INFO, "Start parsing organism: %s" % organism, preworker)
+        #     ids = search.searchID(organism, worker=preworker)
+        #     if ids == []:
+        #         emitLog(Log.WARNING, "Did not find any NC corresponding to organism: %s" % organism, preworker)
+        #         continue
+        #     organism_files_to_parse = tree.needParsing(organism_path, ids, worker=preworker)
+        #     emitLog(Log.INFO, "Organism %s has %d file(s) that need(s) to be parsed" % (organism, organism_files_to_parse), preworker)
+        #     if organism_files_to_parse > 0:
+        #         for id in ids:
+        #             parsing_arguments.append((organism_path, id, organism))
+        # preworker.signals.result.emit(parsing_arguments)
+        pass
 
     def workerWork(self, parsing_argument, worker=None):
         """
@@ -222,11 +271,12 @@ class Application(QMainWindow):
             parsing_argument (tuple): Parsing informations (organism path, file id, organism name).
             worker (Preworker, optional): Worker used to execute this function on a thread. Defaults to None.
         """
-        organism_path, id, organism = parsing_argument
-        emitLog(Log.INFO, "Start parsing file: %s" % id, worker)
-        record = fetch.fetchFromID(id, worker=worker)
-        if record is not None:
-            feature_parser.parseFeatures(self.region_type, organism_path, id, organism, record, worker=worker)
+        # organism_path, id, organism = parsing_argument
+        # emitLog(Log.INFO, "Start parsing file: %s" % id, worker)
+        # record = fetch.fetchFromID(id, worker=worker)
+        # if record is not None:
+        #     feature_parser.parseFeatures(self.region_type, organism_path, id, organism, record, worker=worker)
+        pass
 
     def workerComplete(self):
         """
@@ -234,11 +284,90 @@ class Application(QMainWindow):
         """
         emitLog(Log.INFO, "Thread complete")
         self.nb_running_threads -= 1
-        self.nb_parsed_files += 1
+        self.nb_compressed_files += 1
         self.processWorkerQueue()
         self.updateProgressBar()
         if self.worker_queue.empty() and self.nb_running_threads == 0:
             self.endOfParsing()
+
+    def Parsing(self, parsing_arguments):
+        """
+        Handle parsing of multiple files. For each file, create a Worker (that will parse a single file) and add it to the Worker queue.
+
+        Args:
+            parsing_arguments (list): List of tuples containing parsing informations (organism path, file id, organism name).
+        """
+        if parsing_arguments == []:
+            self.endOfParsing()
+            return
+        
+        emitLog(Log.INFO, "Starting workers to parse files...")
+        self.nb_running_threads -=1
+        self.start_parsing_label = True
+
+        if not self.start_parsing_label or parsing_arguments == []:
+            emitLog(Log.INFO, "End of parsing")
+            self.resetButton()
+            return
+        
+        t = 0
+        self.nb_files_to_compress = len(parsing_arguments)
+        for parsing_argument in parsing_arguments:
+            # Pass the function to execute
+            # Any other args, kwargs are passed to the run function
+            worker = Worker(self.workerWork, parsing_argument=parsing_argument)
+            worker.signals.finished.connect(self.workerComplete)
+            worker.signals.log.connect(emitLog)
+            if not self.start_parsing_label:
+                return
+
+            # Start the thread
+            self.addWorker(worker)
+            emitLog(Log.INFO, "Starting thread %d" % t)
+            t += 1
+        self.start_parsing_label = False        
+
+    def preParsing(self, organisms):
+        """
+        Start a Preworker on a thread that will handle preparsing.
+        Note: used to keep the GUI reponsive.
+
+        Args:
+            organisms (list): Tuples containing the name of the organism and the path to its folder.
+        """
+        emitLog(Log.INFO, "Start looking for files to parse...")
+        pre_worker = Preworker(self.preWorkerWork, organisms=organisms)
+        pre_worker.signals.result.connect(self.Parsing)
+        pre_worker.signals.log.connect(emitLog)
+        self.addWorker(pre_worker)
+
+    def startCompression(self):
+        """
+        Start file parsing.
+        """
+        emitLog(Log.INFO, "Initialising parsing")
+
+        if self.selected_path == "" or not os.path.isdir(self.selected_path):
+            emitLog(Log.ERROR, "Invalid path: " + self.selected_path)
+            self.resetButton()
+        elif self.region_type == []:
+            emitLog(Log.ERROR, "No DNA region selected")
+            self.resetButton()
+        else:
+            self.resetProgressbar()
+            emitLog(Log.INFO, "Stop parsing")
+            # self.organisms_to_parse = tree.findOrganisms(self.selected_path)
+            self.updateProgressBar()
+            self.preParsing(self.organisms_to_parse)
+
+    def stopCompression(self):
+        """
+        Stop file parsing.
+        """
+        self.button.setEnabled(False)
+        self.worker_queue = Queue()
+        self.start_parsing_label = False
+        emitLog(Log.INFO, "Stop parsing")
 
     def signalHandler(self):
         """
@@ -246,10 +375,18 @@ class Application(QMainWindow):
         Note: Also remove files if they were created during a previous parsing. (For instance, files not needing update)
         """
         emitLog(Log.DEBUG, "Received SIGINT")
-        if self.organisms_to_parse != [] and self.nb_files_to_parse - self.nb_parsed_files > 0:
+        if self.organisms_to_parse != [] and self.nb_files_to_compress - self.nb_compressed_files > 0:
             for organism, organism_path in self.organisms_to_parse:
                 files = [file for file in os.listdir(organism_path) if os.path.isfile(file)]
                 for file in files:
                     if os.path.exists(file):
                         os.remove(file)
                         emitLog(Log.INFO, "Successfully deleted: %s" % file)
+    
+    def endOfParsing(self):
+        """
+        End of parsing.
+        """
+        emitLog(Log.INFO, "End of parsing")
+        self.resetButton()
+        self.updateProgressBar()

@@ -23,7 +23,7 @@ def main():
     # Create application
     _app = QApplication(sys.argv)
     window = Application()
-    apply_stylesheet(_app, theme="light_cyan_500.xml")
+    apply_stylesheet(_app, theme="src/app/theme.xml")
 
     # Signal handler
     signal.signal(signal.SIGINT, signalHandler)
