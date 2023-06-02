@@ -13,6 +13,7 @@ class Log(Enum):
     INFO = 2
     DEBUG = 3
 
+
 def emitLog(level, message, worker=None):
     """
     Multi porpose logging function.
@@ -38,6 +39,7 @@ def emitLog(level, message, worker=None):
                 logging.error("Invalid log level for message: " + message)
         else:
             worker.signals.log.emit(level, message)
+
 
 class CustomFormatter(logging.Formatter):
     FORMATS = {

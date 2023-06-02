@@ -40,7 +40,7 @@ class Worker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
-        self.kwargs["parsing_argument"] = kwargs["parsing_argument"]
+        self.kwargs["arg"] = kwargs["arg"]
         self.kwargs["worker"] = self
 
     @pyqtSlot()
@@ -56,30 +56,3 @@ class Worker(QRunnable):
             self.signals.error.emit((exctype, value, traceback.format_exc()))
         finally:
             self.signals.finished.emit()
-
-
-class Preworker(QRunnable):
-    """
-    Preworker thread, inherits from QRunnable (to handle worker thread setup), signals and wrap-up.
-    """
-    def __init__(self, fn, *args, **kwargs):
-        super(Preworker, self).__init__()
-        
-        self.fn = fn
-        self.args = args
-        self.kwargs = kwargs
-        self.signals = WorkerSignals()
-        self.kwargs["organisms"] = kwargs["organisms"]
-        self.kwargs["preworker"] = self
-
-    @pyqtSlot()
-    def run(self):
-        """
-        Handle preparsing.
-        """
-        try:
-            self.fn(*self.args, **self.kwargs)
-        except:
-            exctype, value = sys.exc_info()[:2]
-            print(exctype, value, traceback.format_exc())
-            self.signals.error.emit((exctype, value, traceback.format_exc()))            

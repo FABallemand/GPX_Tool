@@ -14,6 +14,10 @@ from PyQt5.QtWidgets import *
 from .logger import *
 from .workers import *
 
+# GPX
+from ..gpx.utils import *
+from ..gpx.compress import *
+
 
 class Application(QMainWindow):
     
@@ -38,7 +42,7 @@ class Application(QMainWindow):
         self.files_to_compress = []
         self.nb_files_to_compress = 0
         self.nb_compressed_files = 0
-        self.start_parsing_label = False
+        self.start_compression_label = False
 
         # Create layout
         self.createLayout()
@@ -52,7 +56,7 @@ class Application(QMainWindow):
         # Show the app
         self.show()
 
-        emitLog(Log.INFO, "Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
+        emitLog(Log.INFO, f"Multithreading with maximum {self.threadpool.maxThreadCount()} threads")
 
     #==== GUI ================================================================#
 
@@ -83,8 +87,8 @@ class Application(QMainWindow):
         self.sort_proxy_model.sort(0, Qt.AscendingOrder)
 
         # Push button
-        self.button_compress_files.clicked.connect(self.onButtonClicked)
         self.button_compress_files_state = 0
+        self.button_compress_files.clicked.connect(self.onButtonClicked)
 
         # Tree view
         self.treeView.setModel(self.sort_proxy_model)
@@ -111,10 +115,9 @@ class Application(QMainWindow):
             text_read.setMarkdown(markdown)
 
         # Progress bar
-        self.F_parsed_last = self.nb_compressed_files
-        self.F_TOparsed_last = self.nb_files_to_compress
-        chaine = "Parsed files: " + str(self.nb_compressed_files) + "/" + str(self.nb_files_to_compress)
-        self.progress_bar_label.setText(chaine)
+        self.last_nb_files_to_compress = self.nb_compressed_files
+        self.las_nb_compressed_files = self.nb_files_to_compress
+        self.progress_bar_label.setText(f"Parsed files: {self.nb_compressed_files}/{self.nb_files_to_compress}")
 
     def setUpLogger(self):
         """
@@ -130,18 +133,19 @@ class Application(QMainWindow):
         logTextBox = QPlainTextEditLogger()
         self.log.addWidget(logTextBox.widget)
         logging.getLogger().addHandler(logTextBox)
+        logging.getLogger().setLevel(logging.INFO)
         logTextBox.setFormatter(CustomFormatter())
 
     def onButtonClicked(self):
         """
         Function executed when the "compress files" button is clicked.
         """
-        if self.button_state == 0:
-            self.button_state = 1
+        if self.button_compress_files_state == 0:
+            self.button_compress_files_state = 1
             self.button_compress_files.setText("Stop")
             self.startCompression()
         else:
-            self.button_state = 0
+            self.button_compress_files_state = 0
             self.button_compress_files.setText("...")
             self.stopCompression()
             self.updateProgressBar()
@@ -150,7 +154,7 @@ class Application(QMainWindow):
         """
         Reset button.
         """
-        self.button_state = 0
+        self.button_compress_files_state = 0
         self.button_compress_files.setText("Compress file(s)")
         self.button_compress_files.setEnabled(True)  
 
@@ -169,7 +173,7 @@ class Application(QMainWindow):
         radio_button = self.sender()
         if radio_button.isChecked():
             self.compression_method = radio_button.text()
-        emitLog(Log.DEBUG, "Compression method: " + str(self.compression_method))
+        emitLog(Log.INFO, f"Compression method: {self.compression_method}")
 
     def onRemoveGPSErrorsChecked(self):
         """
@@ -177,25 +181,25 @@ class Application(QMainWindow):
         """
         if self.checkbox_remove_GPS_errors.isChecked():
             self.remove_GPS_errors = True
-            emitLog(Log.DEBUG, "Rmove GPS errors: ON")
+            emitLog(Log.INFO, "Remove GPS errors: ON")
         else:
             self.remove_GPS_errors = False
-            emitLog(Log.DEBUG, "Rmove GPS errors: OFF")
+            emitLog(Log.INFO, "Remove GPS errors: OFF")
 
     def updateProgressBar(self):
         """
         Update progress bar.
         """
-        advance = self.nb_compressed_files - self.F_parsed_last
-        max = self.nb_files_to_compress - self.F_TOparsed_last
+        advance = self.nb_compressed_files - self.last_nb_files_to_compress
+        max = self.nb_files_to_compress - self.las_nb_compressed_files
 
-        if self.button_state == 0:
+        if self.button_compress_files_state == 0:
             self.fileProgressBar.setValue(max)
             self.fileProgressBar.setMaximum(max)
             chaine = "Parsed files: " + str(max) + "/" + str(max)
             self.progress_bar_label.setText(chaine)
-            self.F_TOparsed_last = self.nb_files_to_compress
-            self.F_parsed_last = self.nb_compressed_files
+            self.las_nb_compressed_files = self.nb_files_to_compress
+            self.last_nb_files_to_compress = self.nb_compressed_files
         else:
             self.fileProgressBar.setValue(advance)
             self.fileProgressBar.setMaximum(max)
@@ -209,10 +213,11 @@ class Application(QMainWindow):
         """
         self.nb_files_to_compress = 0
         self.nb_compressed_files = 0
-        self.F_parsed_last = 0
-        self.F_TOparsed_last = 0
+        self.last_nb_files_to_compress = 0
+        self.las_nb_compressed_files = 0
         self.fileProgressBar.setValue(0)
         self.fileProgressBar.setMaximum(1)
+        self.updateProgressBar()
 
     #==== Worker Handling ====================================================#
 
@@ -237,156 +242,110 @@ class Application(QMainWindow):
 
     #==== Parsing ============================================================#
 
-    def preWorkerWork(self, organisms, preworker=None):
+    def compressionWork(self, arg, worker=None):
         """
-        For each organism, look for its files in the GenBank database and check if the organism needs to be parsed.
-        An organism is parsed if GenBank files are newer than local files [or if there are less local files than GenBank files (organism partially parsed).](not yet implemented)
-        Create a list (parsing_arguments) containing required informations for parsing (organism path, file id, organism name).
+        Compress a single file.
 
         Args:
-            organisms (list): Tuples containing the name of the organism and the path to its folder.
-            preworker (Preworker, optional): Preworker used to execute this function on a thread. Defaults to None.
+            arg (string): File path.
+            worker (Worker, optional): Worker used to execute this function on a thread. Defaults to None.
         """
-        # parsing_arguments = []
+        file_path = arg
+        emitLog(Log.INFO, f"Start compressing file: {file_path}", worker)
 
-        # for organism, organism_path in organisms:
-        #     emitLog(Log.INFO, "Start parsing organism: %s" % organism, preworker)
-        #     ids = search.searchID(organism, worker=preworker)
-        #     if ids == []:
-        #         emitLog(Log.WARNING, "Did not find any NC corresponding to organism: %s" % organism, preworker)
-        #         continue
-        #     organism_files_to_parse = tree.needParsing(organism_path, ids, worker=preworker)
-        #     emitLog(Log.INFO, "Organism %s has %d file(s) that need(s) to be parsed" % (organism, organism_files_to_parse), preworker)
-        #     if organism_files_to_parse > 0:
-        #         for id in ids:
-        #             parsing_arguments.append((organism_path, id, organism))
-        # preworker.signals.result.emit(parsing_arguments)
-        pass
+        # Open GPX file
+        gpx = openGPX(file_path)
 
-    def workerWork(self, parsing_argument, worker=None):
-        """
-        Parse a single file.
+        # Remove GPS errors
+        if self.remove_GPS_errors:
+            gpx, _ = removeGPSErrors(gpx)
 
-        Args:
-            parsing_argument (tuple): Parsing informations (organism path, file id, organism name).
-            worker (Preworker, optional): Worker used to execute this function on a thread. Defaults to None.
-        """
-        # organism_path, id, organism = parsing_argument
-        # emitLog(Log.INFO, "Start parsing file: %s" % id, worker)
-        # record = fetch.fetchFromID(id, worker=worker)
-        # if record is not None:
-        #     feature_parser.parseFeatures(self.region_type, organism_path, id, organism, record, worker=worker)
-        pass
+        # Compress GPX
+        gpx = compressFile(gpx, self.compression_method)
+
+        # Save result
+        result_path = file_path[:-4] + "_compressed.gpx"
+        saveGPX(gpx, result_path)
+        emitLog(Log.INFO, f"Compressed file saved at: {result_path}")
 
     def workerComplete(self):
         """
-        Handle worker (file parsing) terminaison: start next worker, update progress bar, detect end of parsing.
+        Handle worker (file compression) terminaison: start next worker, update progress bar, detect end of compression.
         """
-        emitLog(Log.INFO, "Thread complete")
+        emitLog(Log.DEBUG, "Thread complete")
         self.nb_running_threads -= 1
         self.nb_compressed_files += 1
         self.processWorkerQueue()
         self.updateProgressBar()
         if self.worker_queue.empty() and self.nb_running_threads == 0:
-            self.endOfParsing()
+            self.endOfCompression()
 
-    def Parsing(self, parsing_arguments):
+    def compression(self):
         """
-        Handle parsing of multiple files. For each file, create a Worker (that will parse a single file) and add it to the Worker queue.
-
-        Args:
-            parsing_arguments (list): List of tuples containing parsing informations (organism path, file id, organism name).
+        Handle compression of multiple files. For each file, create a Worker (that will compress a single file) and add it to the Worker queue.
         """
-        if parsing_arguments == []:
-            self.endOfParsing()
+        if self.files_to_compress == []:
+            emitLog(Log.WARNING, "No GPX file to compress...")
+            self.endOfCompression()
             return
         
-        emitLog(Log.INFO, "Starting workers to parse files...")
+        emitLog(Log.DEBUG, "Starting workers to parse files...")
         self.nb_running_threads -=1
-        self.start_parsing_label = True
-
-        if not self.start_parsing_label or parsing_arguments == []:
-            emitLog(Log.INFO, "End of parsing")
-            self.resetButton()
-            return
+        self.start_compression_label = True
         
         t = 0
-        self.nb_files_to_compress = len(parsing_arguments)
-        for parsing_argument in parsing_arguments:
+        self.nb_files_to_compress = len(self.files_to_compress)
+        for file in self.files_to_compress:
             # Pass the function to execute
             # Any other args, kwargs are passed to the run function
-            worker = Worker(self.workerWork, parsing_argument=parsing_argument)
+            worker = Worker(self.compressionWork, arg=file)
             worker.signals.finished.connect(self.workerComplete)
             worker.signals.log.connect(emitLog)
-            if not self.start_parsing_label:
+            if not self.start_compression_label:
                 return
 
             # Start the thread
             self.addWorker(worker)
-            emitLog(Log.INFO, "Starting thread %d" % t)
+            emitLog(Log.DEBUG, f"Starting thread {t}")
             t += 1
-        self.start_parsing_label = False        
-
-    def preParsing(self, organisms):
-        """
-        Start a Preworker on a thread that will handle preparsing.
-        Note: used to keep the GUI reponsive.
-
-        Args:
-            organisms (list): Tuples containing the name of the organism and the path to its folder.
-        """
-        emitLog(Log.INFO, "Start looking for files to parse...")
-        pre_worker = Preworker(self.preWorkerWork, organisms=organisms)
-        pre_worker.signals.result.connect(self.Parsing)
-        pre_worker.signals.log.connect(emitLog)
-        self.addWorker(pre_worker)
+        self.start_compression_label = False
 
     def startCompression(self):
         """
-        Start file parsing.
+        Start file(s) compression.
         """
-        emitLog(Log.INFO, "Initialising parsing")
+        emitLog(Log.DEBUG, "Initialising compression")
 
         if self.selected_path == "" or not os.path.isdir(self.selected_path):
             emitLog(Log.ERROR, "Invalid path: " + self.selected_path)
-            self.resetButton()
-        elif self.region_type == []:
-            emitLog(Log.ERROR, "No DNA region selected")
-            self.resetButton()
+            self.endOfCompression()
+        # elif check self.remove_GPS_errors and self.compression_method
         else:
+            if os.path.isfile(self.selected_path):
+                self.files_to_compress = [self.selected_path]
+            else:
+                self.files_to_compress = [os.path.join(self.selected_path, file) for file in os.listdir(self.selected_path) if os.path.isfile(os.path.join(self.selected_path, file)) and file.endswith(".gpx")]
             self.resetProgressbar()
-            emitLog(Log.INFO, "Stop parsing")
-            # self.organisms_to_parse = tree.findOrganisms(self.selected_path)
-            self.updateProgressBar()
-            self.preParsing(self.organisms_to_parse)
+            self.compression()
 
     def stopCompression(self):
         """
         Stop file parsing.
         """
-        self.button.setEnabled(False)
+        self.button_compress_files.setEnabled(False)
         self.worker_queue = Queue()
-        self.start_parsing_label = False
-        emitLog(Log.INFO, "Stop parsing")
+        self.start_compression_label = False
+        emitLog(Log.INFO, "Stop compression")
+
+    def endOfCompression(self):
+        """
+        End of compression.
+        """
+        emitLog(Log.INFO, "Files successfully compressed!")
+        self.resetButton()
+        self.resetProgressbar()
 
     def signalHandler(self):
         """
-        Delete all organisms files in the selected folder (self.selected_path).
-        Note: Also remove files if they were created during a previous parsing. (For instance, files not needing update)
         """
         emitLog(Log.DEBUG, "Received SIGINT")
-        if self.organisms_to_parse != [] and self.nb_files_to_compress - self.nb_compressed_files > 0:
-            for organism, organism_path in self.organisms_to_parse:
-                files = [file for file in os.listdir(organism_path) if os.path.isfile(file)]
-                for file in files:
-                    if os.path.exists(file):
-                        os.remove(file)
-                        emitLog(Log.INFO, "Successfully deleted: %s" % file)
-    
-    def endOfParsing(self):
-        """
-        End of parsing.
-        """
-        emitLog(Log.INFO, "End of parsing")
-        self.resetButton()
-        self.updateProgressBar()
