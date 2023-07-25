@@ -1,13 +1,20 @@
-# GPX Tool
+# 🌍 GPX Tool
 
-## Description
+## 🗺 Description
+Easy to use GPX files utility software.
 
-## References
-- Pypi: [gpxpy](https://pypi.org/project/gpxpy/)
-- Tomo Krajina: [Track Profiler](https://www.trackprofiler.com/)
+In its current state, this simple Python program can help you:
+- Parsing GPX files following the TopoGraphix GPX 1.0 & 1.1 schemas.
+- Modifying GPX files in order to remove GPS errors.
+- Modifying GPX files in order to remove unused data (very handy when using a low power or low capacity GPS device).
+- Plot GPX files content.
+- Save modified GPX files.
 
-## Author
+## 📚 References
+- [ezGPX](https://github.com/FABallemand/ezGPX)
+
+## 👤 Author
 - Fabien ALLEMAND
 
-## Contact
+## 📧 Contact
 - allemand.fabien@orange.fr

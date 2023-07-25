@@ -1,5 +1,10 @@
 *.log
+*.old
+*.private
 
 */.ipynb_checkpoints/*
 */__pycache__/*
 *.pyc
+
+# Python virtual environment
+env/*
