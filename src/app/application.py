@@ -273,7 +273,7 @@ class Application(QMainWindow):
         # Map
         self.map = MatplotlibFigure(self, width=5, height=4, dpi=100)
         self.horizontalLayout_2.addWidget(self.map)
-        logo = np.asarray(Image.open("logo.png"))
+        logo = np.asarray(Image.open("img/logo.png"))
         self.map.axes.imshow(logo)
         self.map.axes.get_xaxis().set_visible(False)
         self.map.axes.get_yaxis().set_visible(False)

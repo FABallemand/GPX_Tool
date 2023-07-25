@@ -10,6 +10,8 @@ In its current state, this simple Python program can help you:
 - Plot GPX files content.
 - Save modified GPX files.
 
+![](img/screenshot_1.png)
+
 ## 📚 References
 - [ezGPX](https://github.com/FABallemand/ezGPX)
 
