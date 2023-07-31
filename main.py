@@ -2,6 +2,7 @@ import sys, signal
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from qt_material import apply_stylesheet
+
 from src import *
 
 def main():
