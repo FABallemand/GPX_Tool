@@ -10,6 +10,12 @@ test/
 */__pycache__/*
 *.pyc
 
+# PyInstaller
+build/*
+dist/*
+*.spec
+*.exe
+
 # Python virtual environment
 env/*
 

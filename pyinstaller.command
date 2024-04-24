@@ -1,0 +1,1 @@
+pyinstaller --additional-hooks-dir=C:\Users\allem\Downloads\GPX_Tool --onefile -w main.py

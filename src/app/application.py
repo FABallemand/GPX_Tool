@@ -9,6 +9,8 @@ from PyQt5 import uic
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+# from PyQt5.QtCore import QThreadPool, QDir, QSortFilterProxyModel
+# from PyQt5.QtWidgets import QMainWindow, QFileSystemModel
 
 # Images
 import numpy as np
