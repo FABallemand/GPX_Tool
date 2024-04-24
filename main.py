@@ -23,7 +23,7 @@ def main():
     # Create application
     _app = QApplication(sys.argv)
     window = Application()
-    apply_stylesheet(_app, theme="src/app/theme.xml")
+    # apply_stylesheet(_app, theme="src/app/theme.xml")
 
     # Signal handler
     signal.signal(signal.SIGINT, signalHandler)
@@ -31,7 +31,7 @@ def main():
     # Allow Python interpreter to run every few seconds to handle signals
     timer = QTimer()
     timer.start(500)
-    timer.timeout.connect(lambda: None) # Let the interpreter run each 500 ms.
+    timer.timeout.connect(lambda: None) # Let the interpreter run each 500 ms
 
     # Run application
     sys.exit(_app.exec_())

@@ -2,9 +2,16 @@
 *.old
 *.private
 
+# Test
+test/
+
+# Python
 */.ipynb_checkpoints/*
 */__pycache__/*
 *.pyc
 
 # Python virtual environment
 env/*
+
+# VS Code
+.vscode/

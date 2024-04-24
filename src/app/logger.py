@@ -43,10 +43,10 @@ def emitLog(level, message, worker=None):
 
 class CustomFormatter(logging.Formatter):
     FORMATS = {
-        logging.ERROR:   ("[%(levelname)-8s] %(message)s", "red"),
-        logging.DEBUG:   ("[%(levelname)-8s] %(message)s", "green"),
-        logging.INFO:    ("[%(levelname)-8s] %(message)s", "blue"),
-        logging.WARNING: ("[%(levelname)-8s] %(message)s", "orange")
+        logging.ERROR:   ("[%(asctime)s][%(levelname)s] %(message)s", "red"),
+        logging.DEBUG:   ("[%(asctime)s][%(levelname)s] %(message)s", "green"),
+        logging.INFO:    ("[%(asctime)s][%(levelname)s] %(message)s", "blue"),
+        logging.WARNING: ("[%(asctime)s][%(levelname)s] %(message)s", "orange")
     }
 
     def format(self, record):
