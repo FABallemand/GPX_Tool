@@ -598,7 +598,6 @@ class Application(QMainWindow):
         """
         Create README tab
         """
-        # README
         text_read = self.textEdit
         text_read.setReadOnly(True)
         with open("README.md", encoding="utf8") as f:

@@ -1,9 +1,10 @@
-import sys, signal
+import sys
+import signal
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QApplication, QMessageBox
-from qt_material import apply_stylesheet
+# from qt_material import apply_stylesheet
 
-from src import *
+from src import Application
 
 def main():
     """
